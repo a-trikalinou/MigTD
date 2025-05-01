@@ -6,7 +6,7 @@
 extern crate alloc;
 
 mod config;
-mod verify;
+pub mod verify;
 
 use alloc::string::String;
 pub use config::*;

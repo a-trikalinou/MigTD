@@ -58,11 +58,11 @@ const MIGTD_ATTRIBUTES_MASK: [u8; 8] = [0xff, 0xff, 0x00, 0x30, 0x00, 0x00, 0x00
 // 19       APX                 Masked          Feature not required
 const MIGTD_XFAM_MASK: [u8; 8] = [0x03, 0x18, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
 
-struct Report<'a> {
-    platform_info: BTreeMap<PlatformInfoProperty, &'a [u8]>,
-    qe_info: BTreeMap<QeInfoProperty, &'a [u8]>,
-    tdx_module_info: BTreeMap<TdxModuleInfoProperty, &'a [u8]>,
-    migtd_info: BTreeMap<MigTdInfoProperty, &'a [u8]>,
+pub struct Report<'a> {
+    pub platform_info: BTreeMap<PlatformInfoProperty, &'a [u8]>,
+    pub qe_info: BTreeMap<QeInfoProperty, &'a [u8]>,
+    pub tdx_module_info: BTreeMap<TdxModuleInfoProperty, &'a [u8]>,
+    pub migtd_info: BTreeMap<MigTdInfoProperty, &'a [u8]>,
 }
 
 impl<'a> Report<'a> {
@@ -192,10 +192,61 @@ impl<'a> Report<'a> {
             .ok_or(PolicyError::InvalidParameter)
             .copied()
     }
+
+    pub fn from_bytes(data: &'a [u8]) -> Result<Self, &'static str> {
+        if data.len() < 590 { // Ensure the data is large enough for parsing
+            return Err("Data is too short to parse into a Report");
+        }
+
+        let mut platform_info = BTreeMap::new();
+        let mut qe_info = BTreeMap::new();
+        let mut tdx_module_info = BTreeMap::new();
+        let mut migtd_info = BTreeMap::new();
+
+        // Parse platform information
+        platform_info.insert(PlatformInfoProperty::Fmspc, &data[584..590]);
+        platform_info.insert(PlatformInfoProperty::SgxTcbComponents, &data[608..624]);
+        platform_info.insert(PlatformInfoProperty::PceSvn, &data[606..608]);
+        platform_info.insert(PlatformInfoProperty::TdxTcbComponents, &data[590..606]);
+
+        // Parse QE information
+        qe_info.insert(QeInfoProperty::MiscSelect, &data[626..630]);
+        qe_info.insert(QeInfoProperty::Attributes, &data[634..650]);
+        qe_info.insert(QeInfoProperty::MrEnclave, &data[666..698]);
+        qe_info.insert(QeInfoProperty::MrSigner, &data[698..730]);
+        qe_info.insert(QeInfoProperty::IsvProID, &data[730..732]);
+        qe_info.insert(QeInfoProperty::IsvSvn, &data[732..734]);
+
+        // Parse TDX module information
+        tdx_module_info.insert(TdxModuleInfoProperty::TdxModuleMajorVersion, &data[624..625]);
+        tdx_module_info.insert(TdxModuleInfoProperty::TdxModuleSvn, &data[625..626]);
+        tdx_module_info.insert(TdxModuleInfoProperty::MrSeam, &data[16..64]);
+        tdx_module_info.insert(TdxModuleInfoProperty::MrSignerSeam, &data[64..112]);
+        tdx_module_info.insert(TdxModuleInfoProperty::Attributes, &data[112..120]);
+
+        // Parse MigTD-specific information
+        migtd_info.insert(MigTdInfoProperty::Attributes, &data[120..128]);
+        migtd_info.insert(MigTdInfoProperty::Xfam, &data[128..136]);
+        migtd_info.insert(MigTdInfoProperty::MrTd, &data[136..184]);
+        migtd_info.insert(MigTdInfoProperty::MrConfigId, &data[184..232]);
+        migtd_info.insert(MigTdInfoProperty::MrOwner, &data[232..280]);
+        migtd_info.insert(MigTdInfoProperty::MrOwnerConfig, &data[280..328]);
+        migtd_info.insert(MigTdInfoProperty::Rtmr0, &data[328..376]);
+        migtd_info.insert(MigTdInfoProperty::Rtmr1, &data[376..424]);
+        migtd_info.insert(MigTdInfoProperty::Rtmr2, &data[424..472]);
+        migtd_info.insert(MigTdInfoProperty::Rtmr3, &data[472..520]);
+
+        Ok(Self {
+            platform_info,
+            qe_info,
+            tdx_module_info,
+            migtd_info,
+        })
+    }
 }
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
-enum PlatformInfoProperty {
+pub enum PlatformInfoProperty {
     Fmspc,
     SgxTcbComponents,
     PceSvn,
@@ -216,7 +267,7 @@ impl From<&str> for PlatformInfoProperty {
 }
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
-enum QeInfoProperty {
+pub enum QeInfoProperty {
     MiscSelect,
     Attributes,
     MrEnclave,
@@ -240,7 +291,7 @@ impl From<&str> for QeInfoProperty {
 }
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
-enum TdxModuleInfoProperty {
+pub enum TdxModuleInfoProperty {
     TdxModuleMajorVersion,
     TdxModuleSvn,
     MrSeam,
@@ -263,7 +314,7 @@ impl From<&str> for TdxModuleInfoProperty {
 }
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
-enum MigTdInfoProperty {
+pub enum MigTdInfoProperty {
     Attributes,
     Xfam,
     MrTd,
