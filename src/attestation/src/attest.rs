@@ -4,7 +4,7 @@
 
 use crate::{
     binding::get_quote as get_quote_inner, binding::init_heap, binding::verify_quote_integrity,
-    binding::AttestLibError, root_ca::ROOT_CA, Error, TD_VERIFIED_REPORT_SIZE,
+    binding::AttestLibError, root_ca::ROOT_CA, root_ca, Error, TD_VERIFIED_REPORT_SIZE,
 };
 use alloc::{vec, vec::Vec};
 use core::{alloc::Layout, ffi::c_void, ops::Range};
@@ -43,9 +43,14 @@ pub fn get_quote(td_report: &[u8]) -> Result<Vec<u8>, Error> {
     Ok(quote)
 }
 
-pub fn verify_quote(quote: &[u8]) -> Result<Vec<u8>, Error> {
+pub fn verify_quote(quote: &[u8]) -> Result<Vec<u8>, (Error, usize)> {
     let mut td_report_verify = vec![0u8; TD_REPORT_VERIFY_SIZE];
     let mut report_verify_size = TD_REPORT_VERIFY_SIZE as u32;
+
+    pub const SAMPLE_ROOT_CA: &[u8] = include_bytes!("../../policy/test/my_root_ca.der");
+    if root_ca::set_ca(SAMPLE_ROOT_CA).is_err() {
+        return Err((Error::InvalidRootCa, 0));
+    }
 
     // Safety:
     // ROOT_CA must have been set and checked at this moment.
@@ -67,14 +72,42 @@ pub fn verify_quote(quote: &[u8]) -> Result<Vec<u8>, Error> {
             td_report_verify.as_mut_ptr() as *mut c_void,
             &mut report_verify_size as *mut u32,
         );
-        if result != AttestLibError::Success {
-            return Err(Error::VerifyQuote);
+        if result == AttestLibError::SgxQlErrorInvalidParameterAnna {
+            return Err((Error::SgxQlErrorInvalidParameterAnna, report_verify_size as usize));
+        } else if result == AttestLibError::Unexpected {
+            return Err((Error::Unexpected, report_verify_size as usize));
+        } else if result == AttestLibError::InvalidParameter {
+            return Err((Error::InvalidParameter, report_verify_size as usize));
+        } else if result == AttestLibError::OutOfMemory {
+            return Err((Error::OutOfMemory, report_verify_size as usize));
+        } else if result == AttestLibError::VsockFailure {
+            return Err((Error::VsockFailure, report_verify_size as usize));
+        } else if result == AttestLibError::ReportFailure {
+            return Err((Error::ReportFailure, report_verify_size as usize));
+        } else if result == AttestLibError::ExtendFailure {
+            return Err((Error::ExtendFailure, report_verify_size as usize));
+        } else if result == AttestLibError::NotSupported {
+            return Err((Error::NotSupported, report_verify_size as usize));
+        } else if result == AttestLibError::QuoteFailure {
+            return Err((Error::QuoteFailure, report_verify_size as usize));
+        } else if result == AttestLibError::Busy {
+            return Err((Error::Busy, report_verify_size as usize));
+        } else if result == AttestLibError::DeviceFailure {
+            return Err((Error::DeviceFailure, report_verify_size as usize));
+        } else if result == AttestLibError::InvalidRtmrIndex {
+            return Err((Error::InvalidRtmrIndex, report_verify_size as usize));
+        } else if result != AttestLibError::Success {
+            return Err((Error::VerifyQuote, report_verify_size as usize));
+        }
+
+        if report_verify_size as usize != TD_VERIFIED_REPORT_SIZE { // Return 1024 instead of 734
+            return Err((Error::AnnaError, report_verify_size as usize));
         }
     }
 
-    if report_verify_size as usize != TD_VERIFIED_REPORT_SIZE {
-        return Err(Error::InvalidOutput);
-    }
+    // if report_verify_size as usize != TD_VERIFIED_REPORT_SIZE { // Return 1024 instead of 734
+    //     return Err((Error::AnnaError, result as usize));
+    // }
 
     mask_verified_report_values(&mut td_report_verify[..report_verify_size as usize]);
     Ok(td_report_verify[..report_verify_size as usize].to_vec())

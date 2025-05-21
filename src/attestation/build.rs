@@ -8,9 +8,9 @@ use std::process::Command;
 fn main() {
     // Skip the compilation of attestation library when the remote attestation is not enabled or
     // running unit test.
-    if cfg!(feature = "test") {
-        return;
-    }
+    // if cfg!(feature = "test") {
+    //     return;
+    // }
 
     // Always use release build of attestation library.
     // Cargo will set the "DEBUG" variable to "false" if the profile is release, but it will

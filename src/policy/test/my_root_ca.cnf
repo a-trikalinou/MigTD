@@ -1,0 +1,18 @@
+[ req ]
+distinguished_name = req_distinguished_name
+x509_extensions = v3_ca
+prompt = no
+
+[ req_distinguished_name ]
+C = US
+ST = CA
+L = Santa Clara
+O = Intel Corporation
+CN = Intel SGX Root CA
+
+[ v3_ca ]
+subjectKeyIdentifier = hash
+authorityKeyIdentifier = keyid:always,issuer:always
+basicConstraints = CA:TRUE, pathlen:1
+keyUsage = critical, digitalSignature, keyCertSign, cRLSign
+crlDistributionPoints = URI:https://certificates.trustedservices.intel.com/IntelSGXRootCA.der

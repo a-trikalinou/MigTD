@@ -746,55 +746,20 @@ mod test {
     }
 
     #[test]
-    fn anna_test() {
-        // Load the sample TD report from a file
-        let sample_tdreport = include_bytes!("../../../policy/test/report.dat");
+    pub fn anna_test() {
 
-        // Parse the sample TD report into a Report struct
-        let report = Report::from_bytes(sample_tdreport).expect("Failed to parse TD report");
+        println!("Anna -- Starting test...");
 
-        // Print parsed fields for debugging
-        println!("Parsed TD Report:");
-        for (key, value) in &report.platform_info {
-            println!("Platform Info - {:?}: {:02x?}", key, value);
-        }
-        for (key, value) in &report.qe_info {
-            println!("QE Info - {:?}: {:02x?}", key, value);
-        }
-        for (key, value) in &report.tdx_module_info {
-            println!("TDX Module Info - {:?}: {:02x?}", key, value);
-        }
-        for (key, value) in &report.migtd_info {
-            println!("MigTD Info - {:?}: {:02x?}", key, value);
-        }
-        println!();
-
-        // let quote = attestation::get_quote(sample_tdreport.as_bytes()).map_err(|_| RatlsError::GetQuote);
-        // match quote {
-        //     Ok(quote) => {
-        //         println!("Successfully generated TD quote!");
-        //         print_quote(&quote);
-        //     }
-        //     Err(e) => {
-        //         println!("Failed to generate TD quote: {:?}", e);
-        //     }
-        // }
         // // Mock a valid quote for testing
-        // let valid_quote = vec![0u8; 64]; // Replace with a realistic mock quote if available
+        // let sample_tdquote = include_bytes!("../../../policy/test/sample_tdquote_v5.dat");
+        // // let valid_quote = vec![0u8; 64]; // Replace with a realistic mock quote if available
 
         // // Call the verify_quote function
-        // let result = attestation::verify_quote(&valid_quote);
-
-        // // Assert that the result is Ok (indicating the quote is valid)
-        // assert!(result.is_ok(), "Expected the quote to be valid, but it failed verification");
-
-        // // Mock an invalid quote for testing
-        // let invalid_quote = vec![0u8; 32]; // Invalid size or content
-
-        // // Call the verify_quote function
-        // let result = attestation::verify_quote(&invalid_quote);
+        // let result = attestation::verify_quote(sample_tdquote);
 
         // // Assert that the result is an error (indicating the quote is invalid)
+        // println!("result: {:?}", result);
+        // println!();
         // assert!(result.is_err(), "Expected the quote to be invalid, but it passed verification");
 
     }

@@ -2,10 +2,11 @@
 //
 // SPDX-License-Identifier: BSD-2-Clause-Patent
 
-#[cfg(not(feature = "test"))]
-pub(crate) use attest_lib_binding::*;
-#[cfg(feature = "test")]
-pub(crate) use null_binding::*;
+// #[cfg(not(feature = "test"))]
+// pub(crate) use attest_lib_binding::*;
+// #[cfg(feature = "test")]
+// pub(crate) use null_binding::*;
+
 
 #[allow(unused)]
 #[repr(C)]
@@ -35,9 +36,10 @@ pub(crate) enum AttestLibError {
     DeviceFailure = 0x000a,
     /// Only supported RTMR index is 2 and 3
     InvalidRtmrIndex = 0x000b,
+    SgxQlErrorInvalidParameterAnna = 0x0055,
 }
 
-#[cfg(not(feature = "test"))]
+// #[cfg(not(feature = "test"))]
 mod attest_lib_binding {
     use super::*;
 
@@ -100,39 +102,47 @@ mod attest_lib_binding {
     }
 }
 
-#[cfg(feature = "test")]
-mod null_binding {
-    use super::*;
-    use crate::TD_VERIFIED_REPORT_SIZE;
+// #[cfg(feature = "test")]
+// mod null_binding {
+//     use super::*;
+//     use crate::TD_VERIFIED_REPORT_SIZE;
 
-    #[no_mangle]
-    pub unsafe extern "C" fn get_quote(
-        _p_tdx_report: *const ::core::ffi::c_void,
-        _tdx_report_size: u32,
-        _p_quote: *mut ::core::ffi::c_void,
-        _p_quote_size: *mut u32,
-    ) -> AttestLibError {
-        *_p_quote_size = TD_VERIFIED_REPORT_SIZE as u32;
-        AttestLibError::Success
-    }
+//     #[no_mangle]
+//     pub unsafe extern "C" fn get_quote(
+//         _p_tdx_report: *const ::core::ffi::c_void,
+//         _tdx_report_size: u32,
+//         _p_quote: *mut ::core::ffi::c_void,
+//         _p_quote_size: *mut u32,
+//     ) -> AttestLibError {
+//         *_p_quote_size = TD_VERIFIED_REPORT_SIZE as u32;
+//         AttestLibError::Success
+//     }
 
-    #[no_mangle]
-    pub unsafe extern "C" fn verify_quote_integrity(
-        _p_quote: *const ::core::ffi::c_void,
-        _quote_size: u32,
-        _root_pub_key: *const ::core::ffi::c_void,
-        _root_pub_key_size: u32,
-        _p_tdx_report_verify: *mut ::core::ffi::c_void,
-        _p_tdx_report_verify_size: *mut u32,
-    ) -> AttestLibError {
-        AttestLibError::Success
-    }
+//     #[no_mangle]
+//     pub unsafe extern "C" fn verify_quote_integrity(
+//         _p_quote: *const ::core::ffi::c_void,
+//         _quote_size: u32,
+//         _root_pub_key: *const ::core::ffi::c_void,
+//         _root_pub_key_size: u32,
+//         _p_tdx_report_verify: *mut ::core::ffi::c_void,
+//         _p_tdx_report_verify_size: *mut u32,
+//     ) -> AttestLibError {
+//         AttestLibError::Success
+//     }
 
-    #[no_mangle]
-    pub unsafe extern "C" fn init_heap(
-        _p_td_heap_base: *const ::core::ffi::c_void,
-        _td_heap_size: u32,
-    ) -> AttestLibError {
-        AttestLibError::Success
-    }
-}
+//     #[no_mangle]
+//     pub unsafe extern "C" fn init_heap(
+//         _p_td_heap_base: *const ::core::ffi::c_void,
+//         _td_heap_size: u32,
+//     ) -> AttestLibError {
+//         AttestLibError::Success
+//     }
+// }
+
+pub(crate) use attest_lib_binding::{get_quote, init_heap, verify_quote_integrity};
+
+// // For other functions, continue using the test bindings
+// #[cfg(feature = "test")]
+// pub(crate) use null_binding::{get_quote, init_heap};
+// #[cfg(not(feature = "test"))]
+// pub(crate) use attest_lib_binding::{get_quote, init_heap};
