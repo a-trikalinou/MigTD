@@ -5,6 +5,53 @@
 #![cfg_attr(not(test), no_std)]
 #![cfg_attr(not(test), no_main)]
 
+#[cfg(test)]
+mod early_init {
+    #[link_section = ".init_array.00001"]
+    #[used]
+    static INIT1: fn() = print_init;
+
+    // #[link_section = ".preinit_array"]
+    // #[used]
+    // static INIT2: fn() = print_init;
+
+    fn print_init() {
+        let messages = [
+            b"[ANNA INIT] =====================================\n",
+            b"[ANNA INIT] Starting very early initialization   \n",
+            b"[ANNA INIT] Testing .init_array execution......  \n",
+            b"[ANNA INIT] =====================================\n",
+        ];
+
+        for msg in messages {
+            // Write to stderr with explicit flush
+            unsafe {
+                // Write message
+                core::arch::asm!(
+                    "syscall",
+                    in("rax") 1,        // sys_write
+                    in("rdi") 2,        // stderr
+                    in("rsi") msg.as_ptr(),
+                    in("rdx") msg.len(),
+                    lateout("rcx") _,
+                    lateout("r11") _,
+                    options(nostack)
+                );
+
+                // Force flush with sync syscall
+                core::arch::asm!(
+                    "syscall",
+                    in("rax") 74,       // sys_fsync
+                    in("rdi") 2,        // stderr
+                    lateout("rcx") _,
+                    lateout("r11") _,
+                    options(nostack)
+                );
+            }
+        }
+    }
+}
+
 #[cfg_attr(feature = "main", macro_use)]
 extern crate alloc;
 
@@ -14,6 +61,16 @@ pub mod event_log;
 pub mod mig_policy;
 pub mod migration;
 pub mod ratls;
+
+// #[cfg(test)]
+// use ctor::ctor;
+
+// #[cfg(test)]
+// #[ctor]
+// fn init() {
+//     println!("Anna --- In migtd ctor - Global initialization before any libraries load");
+//     std::env::set_var("RUST_BACKTRACE", "1");
+// }
 
 /// The entry point of MigTD-Core
 ///
