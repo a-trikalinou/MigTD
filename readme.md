@@ -1,3 +1,9 @@
+# Instructions to run the anna_test
+```
+cd MigTD/src/migtd/
+CARGO_CFG_TEST=1 cargo test anna_test -- --nocapture --test-threads=1 2>&1
+```
+
 # rust-migtd
 
 A rust version of Migration TD.
