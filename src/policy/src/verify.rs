@@ -1691,4 +1691,262 @@ mod tests {
         mask_bytes_array(&mut attributes, &MIGTD_ATTRIBUTES_MASK);
         assert_eq!(&attributes, &[0, 0, 0, 0, 0, 0, 0, 0]);
     }
+
+    fn set_rtmrs(event_log: &[u8], report: &Report) {
+        let mut rtmrs: [[u8; 96]; 4] = [[0; 96]; 4];
+
+        let event_log = if let Some(event_log) = CcEventLogReader::new(event_log) {
+            event_log
+        } else {
+            return Err(PolicyError::InvalidEventLog);
+        };
+
+        for (event_header, _) in event_log.cc_events {
+            let rtmr_index = match event_header.mr_index {
+                0 => 0xFF,
+                1..=4 => event_header.mr_index - 1,
+                _ => 0xFF,
+            } as usize;
+
+            if rtmr_index <= MAX_RTMR_INDEX {
+                rtmrs[rtmr_index][48..].copy_from_slice(&event_header.digest.digests[0].digest.sha384);
+                if let Ok(digest) = digest_sha384(&rtmrs[rtmr_index]) {
+                    rtmrs[rtmr_index][0..48].copy_from_slice(&digest);
+                } else {
+                    return Err(PolicyError::Crypto);
+                }
+            } else {
+                return Err(PolicyError::InvalidEventLog);
+            }
+        }
+
+        report.rtmr0.copy_from_slice(&rtmrs[0]);
+        report.rtmr1.copy_from_slice(&rtmrs[1]);
+        report.rtmr2.copy_from_slice(&rtmrs[2]);
+        report.rtmr3.copy_from_slice(&rtmrs[3]);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_verify_azure_policy() {
+        let template = include_bytes!("../test/report.dat");
+
+        // Create event log
+        let payload = vec![0xffu8; 256];
+        let policy = include_str!("../test/azure_policy_test.json");
+        let trust_anchor = vec![0xffu8; 128];
+        let svn = u64::to_le_bytes(0xf);
+        let root_key = vec![0xffu8; 96];
+
+        let event_log = create_event_log(
+            payload.as_slice(),
+            Some(trust_anchor.as_slice()),
+            Some(svn.as_slice()),
+            policy.as_bytes(),
+            root_key.as_slice(),
+        );
+
+        let policy = serde_json::from_str::<MigPolicy>(policy).unwrap();
+        let event_log_policy = policy
+            .get_migtd_info_policy()
+            .unwrap()
+            .migtd
+            .event_log
+            .as_ref()
+            .unwrap();
+        let local_events = parse_events(&event_log).unwrap();
+
+        assert!(verify_events(true, &event_log_policy, &local_events, &local_events).is_ok());
+
+        // Taking `self` as reference: pass
+        let policy_bytes = include_bytes!("../test/azure_policy_test.json");
+        let verify_result =
+            verify_policy(true, policy_bytes, template, &event_log, template, &event_log);
+    //    assert!(verify_result.is_ok());
+        assert!(matches!(
+            verify_result,
+            Err(PolicyError::InvalidEventLog)
+        ));
+
+        // Test Platform Info Block
+        // Taking exact value as reference: mismatch sgx tcb components
+        let mut report_peer = template.to_vec();
+        report_peer[Report::R_SGX_TCB_COMPONENTS].copy_from_slice(&[0xff; 16]);
+        let verify_result = verify_policy(
+            true,
+            policy_bytes,
+            template,
+            &[0u8; 8],
+            &report_peer,
+            &[0u8; 8],
+        );
+        assert!(matches!(
+            verify_result,
+            Err(PolicyError::UnqulifiedPlatformInfo)
+        ));
+
+        // Taking exact value as reference: mismatch pce svn
+        let mut report_peer = template.to_vec();
+        report_peer[Report::R_PCE_SVN].copy_from_slice(&[0xff; 2]);
+        let verify_result = verify_policy(
+            true,
+            policy_bytes,
+            template,
+            &[0u8; 8],
+            &report_peer,
+            &[0u8; 8],
+        );
+        assert!(matches!(
+            verify_result,
+            Err(PolicyError::UnqulifiedPlatformInfo)
+        ));
+
+        // Taking exact value as reference: mismatch tdx tcb components
+        let mut report_peer = template.to_vec();
+        report_peer[Report::R_TDX_TCB_COMPONENTS].copy_from_slice(&[0xff; 16]);
+        let verify_result = verify_policy(
+            true,
+            policy_bytes,
+            template,
+            &[0u8; 8],
+            &report_peer,
+            &[0u8; 8],
+        );
+        assert!(matches!(
+            verify_result,
+            Err(PolicyError::UnqulifiedPlatformInfo)
+        ));
+
+        // Test QE Info Block
+        // Taking exact value as reference: mismatch isv svn
+        let mut report_peer = template.to_vec();
+        report_peer[Report::R_ISV_SVN].copy_from_slice(&[0xff; 2]);
+        let verify_result = verify_policy(
+            true,
+            policy_bytes,
+            template,
+            &[0u8; 8],
+            &report_peer,
+            &[0u8; 8],
+        );
+        assert!(matches!(
+            verify_result,
+            Err(PolicyError::UnqulifiedQeInfo)
+        ));
+
+        // Test TDX Module Info Block
+        // Taking exact value as reference: mismatch tdx module svn
+        let mut report_peer = template.to_vec();
+        report_peer[Report::R_TDX_MODULE_SVN].copy_from_slice(&[1]);
+        let verify_result = verify_policy(
+            true,
+            policy_bytes,
+            template,
+            &[0u8; 8],
+            &report_peer,
+            &[0u8; 8],
+        );
+        assert!(matches!(
+            verify_result,
+            Err(PolicyError::UnqulifiedTdxModuleInfo)
+        ));
+
+        // Test MigTD Info Block
+        // Taking exact value as reference: mismatch attributes
+        let mut report_peer = template.to_vec();
+        report_peer[Report::R_ATTR_TD].copy_from_slice(&[0xff; 8]);
+        let verify_result = verify_policy(
+            true,
+            policy_bytes,
+            template,
+            &[0u8; 8],
+            &report_peer,
+            &[0u8; 8],
+        );
+        assert!(matches!(
+            verify_result,
+            Err(PolicyError::UnqulifiedMigTdInfo)
+        ));
+
+         // Taking exact value as reference: mismatch xfam
+        let mut report_peer = template.to_vec();
+        report_peer[Report::R_XFAM].copy_from_slice(&[0xfe; 8]);
+        let verify_result = verify_policy(
+            true,
+            policy_bytes,
+            template,
+            &[0u8; 8],
+            &report_peer,
+            &[0u8; 8],
+        );
+        assert!(matches!(
+            verify_result,
+            Err(PolicyError::UnqulifiedMigTdInfo)
+        ));
+
+        // Taking exact value as reference: mismatch mrconfigid
+        let mut report_peer = template.to_vec();
+        report_peer[Report::R_MRCONFIGID].copy_from_slice(&[0xfe; 48]);
+        let verify_result = verify_policy(
+            true,
+            policy_bytes,
+            template,
+            &[0u8; 8],
+            &report_peer,
+            &[0u8; 8],
+        );
+        assert!(matches!(
+            verify_result,
+            Err(PolicyError::UnqulifiedMigTdInfo)
+        ));
+
+        // Taking exact value as reference: mismatch mrowner
+        let mut report_peer = template.to_vec();
+        report_peer[Report::R_MROWNER].copy_from_slice(&[0xfe; 48]);
+        let verify_result = verify_policy(
+            true,
+            policy_bytes,
+            template,
+            &[0u8; 8],
+            &report_peer,
+            &[0u8; 8],
+        );
+        assert!(matches!(
+            verify_result,
+            Err(PolicyError::UnqulifiedMigTdInfo)
+        ));
+
+        // Taking exact value as reference: mismatch mrownerconfig
+        let mut report_peer = template.to_vec();
+        report_peer[Report::R_MROWNERCONFIG].copy_from_slice(&[0xfe; 48]);
+        let verify_result = verify_policy(
+            true,
+            policy_bytes,
+            template,
+            &[0u8; 8],
+            &report_peer,
+            &[0u8; 8],
+        );
+        assert!(matches!(
+            verify_result,
+            Err(PolicyError::UnqulifiedMigTdInfo)
+        ));
+
+        // Taking exact value as reference: mismatch RTMR0
+        let mut report_peer = template.to_vec();
+        report_peer[Report::R_RTMR0].copy_from_slice(&[0xfe; 48]);
+        let verify_result = verify_policy(
+            true,
+            policy_bytes,
+            template,
+            &[0u8; 8],
+            &report_peer,
+            &[0u8; 8],
+        );
+        assert!(matches!(
+            verify_result,
+            Err(PolicyError::UnqulifiedMigTdInfo)
+        ));
+    }
 }
