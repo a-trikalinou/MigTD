@@ -1692,10 +1692,7 @@ mod tests {
         assert_eq!(&attributes, &[0, 0, 0, 0, 0, 0, 0, 0]);
     }
 
-    type CcResult<T> = core::result::Result<T, CcEventLogError>;
-
-fn set_rtmrs<'a>(event_log: &[u8], report: &mut [u8], rtmrs: &'a mut [[u8; 96]; 4]) -> core::result::Result<(), PolicyError>
-{
+    fn set_rtmrs<'a>(event_log: &[u8], report: &mut [u8], rtmrs: &'a mut [[u8; 96]; 4]) -> core::result::Result<(), PolicyError> {
 
         let event_log = if let Some(event_log) = CcEventLogReader::new(event_log) {
             event_log
@@ -1767,9 +1764,19 @@ fn set_rtmrs<'a>(event_log: &[u8], report: &mut [u8], rtmrs: &'a mut [[u8; 96]; 
         assert!(verify_events(true, &event_log_policy, &local_events, &local_events).is_ok());
 
         // Verify policy using same report and event log for both local and peer: fail because RTMRs do not reflect event log
+        // Test source MigTD
         let policy_bytes = include_bytes!("../test/azure_policy_test.json");
         let verify_result =
             verify_policy(true, policy_bytes, template, &event_log, template, &event_log);
+
+        assert!(matches!(
+            verify_result,
+            Err(PolicyError::InvalidEventLog)
+        ));
+
+        // Test dest MigTD
+        let verify_result =
+            verify_policy(false, policy_bytes, template, &event_log, template, &event_log);
 
         assert!(matches!(
             verify_result,
@@ -1782,21 +1789,43 @@ fn set_rtmrs<'a>(event_log: &[u8], report: &mut [u8], rtmrs: &'a mut [[u8; 96]; 
         set_rtmrs(&event_log, &mut template_w_rtmrs, &mut rtmrs).unwrap();
 
         // Verify policy using updated report with RTMRs set: success
+        // Test source MigTD
         let verify_result =
             verify_policy(true, policy_bytes, &template_w_rtmrs, &event_log, &template_w_rtmrs, &event_log);
         assert!(verify_result.is_ok());
 
+        // Test dest MigTD
+        let verify_result =
+            verify_policy(false, policy_bytes, &template_w_rtmrs, &event_log, &template_w_rtmrs, &event_log);
+        assert!(verify_result.is_ok());
+
         // Test Platform Info Block
         // Taking exact value as reference: mismatch sgx tcb components
-        let mut report_peer = template.to_vec();
+        let mut report_peer = template_w_rtmrs.to_vec();
         report_peer[Report::R_SGX_TCB_COMPONENTS].copy_from_slice(&[0xff; 16]);
+
+        // Test source MigTD
         let verify_result = verify_policy(
             true,
             policy_bytes,
-            template,
-            &[0u8; 8],
+            &template_w_rtmrs,
+            &event_log,
             &report_peer,
-            &[0u8; 8],
+            &event_log,
+        );
+        assert!(matches!(
+            verify_result,
+            Err(PolicyError::UnqulifiedPlatformInfo)
+        ));
+
+        // Test dest MigTD
+        let verify_result = verify_policy(
+            false,
+            policy_bytes,
+            &template_w_rtmrs,
+            &event_log,
+            &report_peer,
+            &event_log,
         );
         assert!(matches!(
             verify_result,
@@ -1804,15 +1833,31 @@ fn set_rtmrs<'a>(event_log: &[u8], report: &mut [u8], rtmrs: &'a mut [[u8; 96]; 
         ));
 
         // Taking exact value as reference: mismatch pce svn
-        let mut report_peer = template.to_vec();
+        let mut report_peer = template_w_rtmrs.to_vec();
         report_peer[Report::R_PCE_SVN].copy_from_slice(&[0xff; 2]);
+
+        // Test source MigTD
         let verify_result = verify_policy(
             true,
             policy_bytes,
-            template,
-            &[0u8; 8],
+            &template_w_rtmrs,
+            &event_log,
             &report_peer,
-            &[0u8; 8],
+            &event_log,
+        );
+        assert!(matches!(
+            verify_result,
+            Err(PolicyError::UnqulifiedPlatformInfo)
+        ));
+
+        // Test dest MigTD
+        let verify_result = verify_policy(
+            false,
+            policy_bytes,
+            &template_w_rtmrs,
+            &event_log,
+            &report_peer,
+            &event_log,
         );
         assert!(matches!(
             verify_result,
@@ -1820,15 +1865,31 @@ fn set_rtmrs<'a>(event_log: &[u8], report: &mut [u8], rtmrs: &'a mut [[u8; 96]; 
         ));
 
         // Taking exact value as reference: mismatch tdx tcb components
-        let mut report_peer = template.to_vec();
+        let mut report_peer = template_w_rtmrs.to_vec();
         report_peer[Report::R_TDX_TCB_COMPONENTS].copy_from_slice(&[0xff; 16]);
+
+        // Test source MigTD
         let verify_result = verify_policy(
             true,
             policy_bytes,
-            template,
-            &[0u8; 8],
+            &template_w_rtmrs,
+            &event_log,
             &report_peer,
-            &[0u8; 8],
+            &event_log,
+        );
+        assert!(matches!(
+            verify_result,
+            Err(PolicyError::UnqulifiedPlatformInfo)
+        ));
+
+        // Test dest MigTD
+        let verify_result = verify_policy(
+            false,
+            policy_bytes,
+            &template_w_rtmrs,
+            &event_log,
+            &report_peer,
+            &event_log,
         );
         assert!(matches!(
             verify_result,
@@ -1837,15 +1898,31 @@ fn set_rtmrs<'a>(event_log: &[u8], report: &mut [u8], rtmrs: &'a mut [[u8; 96]; 
 
         // Test QE Info Block
         // Taking exact value as reference: mismatch isv svn
-        let mut report_peer = template.to_vec();
+        let mut report_peer = template_w_rtmrs.to_vec();
         report_peer[Report::R_ISV_SVN].copy_from_slice(&[0xff; 2]);
+
+        // Test source MigTD
         let verify_result = verify_policy(
             true,
             policy_bytes,
-            template,
-            &[0u8; 8],
+            &template_w_rtmrs,
+            &event_log,
             &report_peer,
-            &[0u8; 8],
+            &event_log,
+        );
+        assert!(matches!(
+            verify_result,
+            Err(PolicyError::UnqulifiedQeInfo)
+        ));
+
+        // Test dest MigTD
+        let verify_result = verify_policy(
+            false,
+            policy_bytes,
+            &template_w_rtmrs,
+            &event_log,
+            &report_peer,
+            &event_log,
         );
         assert!(matches!(
             verify_result,
@@ -1854,15 +1931,31 @@ fn set_rtmrs<'a>(event_log: &[u8], report: &mut [u8], rtmrs: &'a mut [[u8; 96]; 
 
         // Test TDX Module Info Block
         // Taking exact value as reference: mismatch tdx module svn
-        let mut report_peer = template.to_vec();
+        let mut report_peer = template_w_rtmrs.to_vec();
         report_peer[Report::R_TDX_MODULE_SVN].copy_from_slice(&[1]);
+
+        // Test source MigTD
         let verify_result = verify_policy(
             true,
             policy_bytes,
-            template,
-            &[0u8; 8],
+            &template_w_rtmrs,
+            &event_log,
             &report_peer,
-            &[0u8; 8],
+            &event_log,
+        );
+        assert!(matches!(
+            verify_result,
+            Err(PolicyError::UnqulifiedTdxModuleInfo)
+        ));
+
+        // Test dest MigTD
+        let verify_result = verify_policy(
+            false,
+            policy_bytes,
+            &template_w_rtmrs,
+            &event_log,
+            &report_peer,
+            &event_log,
         );
         assert!(matches!(
             verify_result,
@@ -1871,15 +1964,31 @@ fn set_rtmrs<'a>(event_log: &[u8], report: &mut [u8], rtmrs: &'a mut [[u8; 96]; 
 
         // Test MigTD Info Block
         // Taking exact value as reference: mismatch attributes
-        let mut report_peer = template.to_vec();
+        let mut report_peer = template_w_rtmrs.to_vec();
         report_peer[Report::R_ATTR_TD].copy_from_slice(&[0xff; 8]);
+
+        // Test source MigTD
         let verify_result = verify_policy(
             true,
             policy_bytes,
-            template,
-            &[0u8; 8],
+            &template_w_rtmrs,
+            &event_log,
             &report_peer,
-            &[0u8; 8],
+            &event_log,
+        );
+        assert!(matches!(
+            verify_result,
+            Err(PolicyError::UnqulifiedMigTdInfo)
+        ));
+
+        // Test dest MigTD
+        let verify_result = verify_policy(
+            false,
+            policy_bytes,
+            &template_w_rtmrs,
+            &event_log,
+            &report_peer,
+            &event_log,
         );
         assert!(matches!(
             verify_result,
@@ -1887,15 +1996,31 @@ fn set_rtmrs<'a>(event_log: &[u8], report: &mut [u8], rtmrs: &'a mut [[u8; 96]; 
         ));
 
          // Taking exact value as reference: mismatch xfam
-        let mut report_peer = template.to_vec();
+        let mut report_peer = template_w_rtmrs.to_vec();
         report_peer[Report::R_XFAM].copy_from_slice(&[0xfe; 8]);
+
+        // Test source MigTD
         let verify_result = verify_policy(
             true,
             policy_bytes,
-            template,
-            &[0u8; 8],
+            &template_w_rtmrs,
+            &event_log,
             &report_peer,
-            &[0u8; 8],
+            &event_log,
+        );
+        assert!(matches!(
+            verify_result,
+            Err(PolicyError::UnqulifiedMigTdInfo)
+        ));
+
+        // Test dest MigTD
+        let verify_result = verify_policy(
+            false,
+            policy_bytes,
+            &template_w_rtmrs,
+            &event_log,
+            &report_peer,
+            &event_log,
         );
         assert!(matches!(
             verify_result,
@@ -1903,15 +2028,31 @@ fn set_rtmrs<'a>(event_log: &[u8], report: &mut [u8], rtmrs: &'a mut [[u8; 96]; 
         ));
 
         // Taking exact value as reference: mismatch mrconfigid
-        let mut report_peer = template.to_vec();
+        let mut report_peer = template_w_rtmrs.to_vec();
         report_peer[Report::R_MRCONFIGID].copy_from_slice(&[0xfe; 48]);
+
+        // Test source MigTD
         let verify_result = verify_policy(
             true,
             policy_bytes,
-            template,
-            &[0u8; 8],
+            &template_w_rtmrs,
+            &event_log,
             &report_peer,
-            &[0u8; 8],
+            &event_log,
+        );
+        assert!(matches!(
+            verify_result,
+            Err(PolicyError::UnqulifiedMigTdInfo)
+        ));
+
+        // Test dest MigTD
+        let verify_result = verify_policy(
+            false,
+            policy_bytes,
+            &template_w_rtmrs,
+            &event_log,
+            &report_peer,
+            &event_log,
         );
         assert!(matches!(
             verify_result,
@@ -1919,15 +2060,31 @@ fn set_rtmrs<'a>(event_log: &[u8], report: &mut [u8], rtmrs: &'a mut [[u8; 96]; 
         ));
 
         // Taking exact value as reference: mismatch mrowner
-        let mut report_peer = template.to_vec();
+        let mut report_peer = template_w_rtmrs.to_vec();
         report_peer[Report::R_MROWNER].copy_from_slice(&[0xfe; 48]);
+
+        // Test source MigTD
         let verify_result = verify_policy(
             true,
             policy_bytes,
-            template,
-            &[0u8; 8],
+            &template_w_rtmrs,
+            &event_log,
             &report_peer,
-            &[0u8; 8],
+            &event_log,
+        );
+        assert!(matches!(
+            verify_result,
+            Err(PolicyError::UnqulifiedMigTdInfo)
+        ));
+
+        // Test dest MigTD
+        let verify_result = verify_policy(
+            false,
+            policy_bytes,
+            &template_w_rtmrs,
+            &event_log,
+            &report_peer,
+            &event_log,
         );
         assert!(matches!(
             verify_result,
@@ -1935,15 +2092,31 @@ fn set_rtmrs<'a>(event_log: &[u8], report: &mut [u8], rtmrs: &'a mut [[u8; 96]; 
         ));
 
         // Taking exact value as reference: mismatch mrownerconfig
-        let mut report_peer = template.to_vec();
+        let mut report_peer = template_w_rtmrs.to_vec();
         report_peer[Report::R_MROWNERCONFIG].copy_from_slice(&[0xfe; 48]);
+
+        // Test source MigTD
         let verify_result = verify_policy(
             true,
             policy_bytes,
-            template,
-            &[0u8; 8],
+            &template_w_rtmrs,
+            &event_log,
             &report_peer,
-            &[0u8; 8],
+            &event_log,
+        );
+        assert!(matches!(
+            verify_result,
+            Err(PolicyError::UnqulifiedMigTdInfo)
+        ));
+
+        // Test dest MigTD
+        let verify_result = verify_policy(
+            false,
+            policy_bytes,
+            &template_w_rtmrs,
+            &event_log,
+            &report_peer,
+            &event_log,
         );
         assert!(matches!(
             verify_result,
@@ -1951,15 +2124,31 @@ fn set_rtmrs<'a>(event_log: &[u8], report: &mut [u8], rtmrs: &'a mut [[u8; 96]; 
         ));
 
         // Taking exact value as reference: mismatch RTMR0
-        let mut report_peer = template.to_vec();
+        let mut report_peer = template_w_rtmrs.to_vec();
         report_peer[Report::R_RTMR0].copy_from_slice(&[0xfe; 48]);
+
+        // Test source MigTD
         let verify_result = verify_policy(
             true,
             policy_bytes,
-            template,
-            &[0u8; 8],
+            &template_w_rtmrs,
+            &event_log,
             &report_peer,
-            &[0u8; 8],
+            &event_log,
+        );
+        assert!(matches!(
+            verify_result,
+            Err(PolicyError::UnqulifiedMigTdInfo)
+        ));
+
+        // Test dest MigTD
+        let verify_result = verify_policy(
+            false,
+            policy_bytes,
+            &template_w_rtmrs,
+            &event_log,
+            &report_peer,
+            &event_log,
         );
         assert!(matches!(
             verify_result,
