@@ -1692,8 +1692,10 @@ mod tests {
         assert_eq!(&attributes, &[0, 0, 0, 0, 0, 0, 0, 0]);
     }
 
-    fn set_rtmrs(event_log: &[u8], report: &Report) {
-        let mut rtmrs: [[u8; 96]; 4] = [[0; 96]; 4];
+    type CcResult<T> = core::result::Result<T, CcEventLogError>;
+
+fn set_rtmrs<'a>(event_log: &[u8], report: &mut [u8], rtmrs: &'a mut [[u8; 96]; 4]) -> core::result::Result<(), PolicyError>
+{
 
         let event_log = if let Some(event_log) = CcEventLogReader::new(event_log) {
             event_log
@@ -1720,10 +1722,11 @@ mod tests {
             }
         }
 
-        report.rtmr0.copy_from_slice(&rtmrs[0]);
-        report.rtmr1.copy_from_slice(&rtmrs[1]);
-        report.rtmr2.copy_from_slice(&rtmrs[2]);
-        report.rtmr3.copy_from_slice(&rtmrs[3]);
+        // Store the values directly in report's BTreeMap
+        report[Report::R_RTMR0].copy_from_slice(&rtmrs[0][0..48]);
+        report[Report::R_RTMR1].copy_from_slice(&rtmrs[1][0..48]);
+        report[Report::R_RTMR2].copy_from_slice(&rtmrs[2][0..48]);
+        report[Report::R_RTMR3].copy_from_slice(&rtmrs[3][0..48]);
 
         Ok(())
     }
@@ -1747,6 +1750,7 @@ mod tests {
             root_key.as_slice(),
         );
 
+        // Extract event log policy from policy file
         let policy = serde_json::from_str::<MigPolicy>(policy).unwrap();
         let event_log_policy = policy
             .get_migtd_info_policy()
@@ -1755,19 +1759,32 @@ mod tests {
             .event_log
             .as_ref()
             .unwrap();
+
+        // Parse the event log
         let local_events = parse_events(&event_log).unwrap();
 
+        // Verify events using same event log for both local and peer
         assert!(verify_events(true, &event_log_policy, &local_events, &local_events).is_ok());
 
-        // Taking `self` as reference: pass
+        // Verify policy using same report and event log for both local and peer: fail because RTMRs do not reflect event log
         let policy_bytes = include_bytes!("../test/azure_policy_test.json");
         let verify_result =
             verify_policy(true, policy_bytes, template, &event_log, template, &event_log);
-    //    assert!(verify_result.is_ok());
+
         assert!(matches!(
             verify_result,
             Err(PolicyError::InvalidEventLog)
         ));
+
+        // Copy report and set RTMRs based on event log
+        let mut rtmrs = [[0u8; 96]; 4];
+        let mut template_w_rtmrs = template.to_vec();
+        set_rtmrs(&event_log, &mut template_w_rtmrs, &mut rtmrs).unwrap();
+
+        // Verify policy using updated report with RTMRs set: success
+        let verify_result =
+            verify_policy(true, policy_bytes, &template_w_rtmrs, &event_log, &template_w_rtmrs, &event_log);
+        assert!(verify_result.is_ok());
 
         // Test Platform Info Block
         // Taking exact value as reference: mismatch sgx tcb components
